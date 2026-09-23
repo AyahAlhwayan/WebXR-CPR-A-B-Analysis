@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebXR CPR A/B Analysis Suite</title>
+<script src="https://cdn.jsdelivr.net/npm/jstat@1.9.6/dist/jstat.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--ink:#17202a;--muted:#64748b;--line:#d9e0e7;--accent:#1d4ed8;--accent2:#0f766e;--danger:#b91c1c;--ok:#15803d}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#111827;color:white;padding:24px 28px;position:sticky;top:0;z-index:5}
+header h1{margin:0 0 5px;font-size:23px} header p{margin:0;color:#cbd5e1;font-size:13px}
+nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px} nav button{border:1px solid #475569;background:#1f2937;color:white;padding:9px 12px;border-radius:8px;cursor:pointer} nav button.active{background:var(--accent);border-color:var(--accent)}
+main{max-width:1450px;margin:22px auto;padding:0 18px}.tab{display:none}.tab.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;box-shadow:0 2px 7px #00000008}
+h2{font-size:19px;margin:0 0 12px} h3{font-size:15px;margin:18px 0 9px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:10px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(200px,1fr));gap:12px}
+label{font-size:12px;font-weight:650;color:#334155;display:block} input,select,textarea{width:100%;padding:9px 10px;border:1px solid #cbd5e1;border-radius:7px;margin-top:5px;background:white} input[type=number]{font-variant-numeric:tabular-nums}
+button.primary,button.secondary,button.danger{border:0;border-radius:8px;padding:10px 14px;color:#fff;cursor:pointer;font-weight:650}.primary{background:var(--accent)}.secondary{background:#475569}.danger{background:var(--danger)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.hint{font-size:12px;color:var(--muted);line-height:1.5}
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:8px} table{border-collapse:collapse;width:100%;font-size:12px} th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;white-space:nowrap} th{background:#f8fafc;position:sticky;top:0} td.num{text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;font-weight:700}.metricgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.metric{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fafafa}.metric b{font-size:20px;display:block;margin-top:5px}
+.sectiontitle{display:flex;justify-content:space-between;gap:10px;align-items:center}.small{font-size:11px;color:var(--muted)}
+.qgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.qgrid .q{border:1px solid var(--line);border-radius:8px;padding:7px;background:#fafafa}.qgrid label{font-size:10px}.qgrid input{margin-top:3px;padding:6px}
+textarea{min-height:110px;font-family:inherit}
+.notice{padding:10px 12px;background:#eff6ff;border-left:4px solid var(--accent);font-size:12px;line-height:1.5;margin:10px 0}.warn{background:#fff7ed;border-left-color:#ea580c}
+canvas{max-height:340px}
+@media(max-width:950px){.grid,.metricgrid{grid-template-columns:repeat(2,1fr)}.qgrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.grid,.grid2,.metricgrid,.qgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+<h1>WebXR CPR A/B Analysis Suite</h1>
+<p>AB/BA counterbalanced study • UXARcis (28 items) • Raw NASA-TLX • 10-item CPR knowledge • behavioral logs • planned inferential statistics</p>
+<nav id="nav"></nav>
+</header>
+<main>
+<section id="data" class="tab active"></section>
+<section id="questionnaires" class="tab"></section>
+<section id="results" class="tab"></section>
+<section id="settings" class="tab"></section>
+</main>
+
+<script>
+const SCALE_MAP = {
+  Perspicuity:[1,2,3], Efficiency:[4,5,6], Dependability:[7,8,9],
+  Usefulness:[10,11,12], Clarity:[13,14,15], Contextuality:[16,17,18,19,20,21],
+  Spatiality:[22,23,24,25,26,27]
+};
+const SCALE_ITEMS = Object.entries(SCALE_MAP).flatMap(([s,ids])=>ids.map(i=>[i,s]));
+const defaultUX = [
+"It is easy to understand how to use the application.",
+"The information presented by the application is easy to understand.",
+"It is easy to learn how to use the application.",
+"I can complete the training tasks efficiently.",
+"I can perform the required actions without unnecessary effort.",
+"The application supports me in completing the training steps efficiently.",
+"The application behaves in a predictable way.",
+"The application responds consistently to my actions.",
+"It is easy to find your way around the application.",
+"The application is useful for CPR training.",
+"The application supports me effectively during the training.",
+"The functions of the application are useful for completing the task.",
+"The information and interface elements are clearly presented.",
+"The important information is easy to recognize.",
+"The presentation of the training information is clear.",
+"The virtual CPR guidance fits the real training environment.",
+"The application is well integrated into the CPR training situation.",
+"The virtual elements are appropriately related to the real environment.",
+"The AR presentation supports the training situation well.",
+"The virtual guidance appears in an appropriate context.",
+"The application provides a coherent AR training experience.",
+"The virtual elements are positioned appropriately in relation to the physical CPR manikin.",
+"The spatial presentation of virtual elements is easy to understand.",
+"The spatial arrangement of virtual guidance supports the task.",
+"The virtual elements appear where I expect them to.",
+"The relationship between virtual guidance and the physical manikin is clear.",
+"The spatial presentation makes the training task easier to perform."
+];
+const defaultKnowledge = [
+["When should CPR be started in an unresponsive person who is not breathing normally?","Immediately after recognizing the condition","After waiting for a doctor","After giving water","Only after 10 minutes",0],
+["What is the recommended compression-to-breath ratio for adult CPR when rescue breaths are provided?","15:2","30:2","30:1","5:1",1],
+["What is the recommended chest-compression rate for adult CPR?","40–60/min","60–80/min","100–120/min","140–160/min",2],
+["What is the approximate recommended compression depth for an adult?","1–2 cm","3–4 cm","5–6 cm","8–10 cm",2],
+["What should the rescuer allow the chest to do between compressions?","Remain compressed","Fully recoil","Move sideways","Be lifted by the rescuer",1],
+["Which description best matches effective chest compressions?","Push hard and fast at the recommended rate","Push slowly and lightly","Stop after every five compressions","Compress only when the person breathes",0],
+["Which finding is most consistent with cardiac arrest in an unresponsive adult?","Normal breathing","Sudden collapse with absent or abnormal normal breathing","A mild headache","Normal speech",1],
+["What emergency number should be used in Germany to activate emergency medical services?","110","112","116117","911",1],
+["Where should the rescuer place the hands for adult chest compressions?","On the centre of the chest","On the abdomen","On the neck","On the left shoulder",0],
+["What should a rescuer do after recognizing an unresponsive person who is not breathing normally?","Activate emergency help and start CPR","Leave the person alone","Give food or drink","Wait for spontaneous recovery",0]
+];
+let state={participants:[],uxText:[...defaultUX],knowledge:[...defaultKnowledge],settings:{alpha:.05,holm:true}};
+let charts=[];
+
+function save(){localStorage.setItem("webxrCprABState",JSON.stringify(state))}
+function load(){try{const x=JSON.parse(localStorage.getItem("webxrCprABState"));if(x) state=x}catch(e){}}
+function fmt(x,d=3){return Number.isFinite(x)?x.toFixed(d):"—"}
+function esc(s){return String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]))}
+function mean(a){a=a.filter(Number.isFinite);return a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN}
+function sd(a){a=a.filter(Number.isFinite);let m=mean(a);return a.length>1?Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1)):NaN}
+function median(a){a=[...a.filter(Number.isFinite)].sort((x,y)=>x-y);if(!a.length)return NaN;return a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2}
+function arr(fn){return state.participants.map(fn).filter(Number.isFinite)}
+function val(x){const n=Number(x);return x!==""&&Number.isFinite(n)?n:NaN}
+function normalCDF(z){return .5*(1+Math.erf(z/Math.sqrt(2)))}
+if(!Math.erf){Math.erf=function(x){let s=x<0?-1:1;x=Math.abs(x);let a1=.254829592,a2=-.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=.3275911,t=1/(1+p*x);return s*(1-((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t*Math.exp(-x*x))}}
+function p2(x){return Number(x).toPrecision(4)}
+function pairedT(a,b){
+ let d=a.map((x,i)=>b[i]-x).filter(Number.isFinite), m=mean(d), s=sd(d), n=d.length, t=m/(s/Math.sqrt(n));
+ let p=2*(1-jStat.studentt.cdf(Math.abs(t),n-1));
+ let se=s/Math.sqrt(n),crit=jStat.studentt.inv(.975,n-1);
+ return {n,mean:m,sd:s,t,df:n-1,p,ci:[m-crit*se,m+crit*se],dz:m/s};
+}
+function welch(a,b){
+ a=a.filter(Number.isFinite);b=b.filter(Number.isFinite);let ma=mean(a),mb=mean(b),va=sd(a)**2,vb=sd(b)**2;
+ let se=Math.sqrt(va/a.length+vb/b.length),t=(mb-ma)/se,df=(va/a.length+vb/b.length)**2/((va/a.length)**2/(a.length-1)+(vb/b.length)**2/(b.length-1));
+ let p=2*(1-jStat.studentt.cdf(Math.abs(t),df)),crit=jStat.studentt.inv(.975,df);
+ return {n1:a.length,n2:b.length,mean1:ma,mean2:mb,diff:mb-ma,t,df,p,ci:[mb-ma-crit*se,mb-ma+crit*se],g:(mb-ma)/Math.sqrt(((a.length-1)*va+(b.length-1)*vb)/(a.length+b.length-2))};
+}
+function wilcoxon(a,b){
+ let d=a.map((x,i)=>b[i]-x).filter(Number.isFinite).filter(x=>x!==0),n=d.length;
+ let abs=d.map((x,i)=>[Math.abs(x),i]).sort((x,y)=>x[0]-y[0]),r=new Array(n),i=0;
+ while(i<n){let j=i;while(j<n&&abs[j][0]===abs[i][0])j++;let rr=(i+1+j)/2;for(let k=i;k<j;k++)r[abs[k][1]]=rr;i=j}
+ let Wp=r.reduce((s,x,k)=>s+(d[k]>0?x:0),0),Wm=r.reduce((s,x,k)=>s+(d[k]<0?x:0),0),W=Math.min(Wp,Wm);
+ let mu=n*(n+1)/4, sig=Math.sqrt(n*(n+1)*(2*n+1)/24),z=(W-mu-.5)/sig,p=2*(1-normalCDF(Math.abs(z)));
+ return {n,W,z,p,rbc:1-(2*W)/(n*(n+1)/2)};
+}
+function mannWhitney(a,b){
+ a=a.filter(Number.isFinite);b=b.filter(Number.isFinite);let all=a.map(x=>[x,0]).concat(b.map(x=>[x,1])).sort((x,y)=>x[0]-y[0]),r=0,i=0;
+ while(i<all.length){let j=i;while(j<all.length&&all[j][0]===all[i][0])j++;let rank=(i+1+j)/2;for(let k=i;k<j;k++)r+=all[k][1]===1?rank:0;i=j}
+ let n1=a.length,n2=b.length,U=r-n2*(n2+1)/2,mu=n1*n2/2, sig=Math.sqrt(n1*n2*(n1+n2+1)/12),z=(U-mu-.5)/sig,p=2*(1-normalCDF(Math.abs(z)));
+ return {n1,n2,U,z,p,rankBiserial:1-(2*U)/(n1*n2)};
+}
+function mcnemar(a,b){
+ let n01=0,n10=0;for(let i=0;i<a.length;i++){if(a[i]===0&&b[i]===1)n01++;if(a[i]===1&&b[i]===0)n10++}
+ let n=n01+n10;let p;
+ if(n===0)p=1; else {let k=Math.min(n01,n10),s=0;for(let i=0;i<=k;i++)s+=jStat.combination(n,i)*.5**n;p=2*Math.min(1,s)}
+ return {n01,n10,discordant:n,p}
+}
+function holm(rows){
+ let indexed=rows.map((r,i)=>({...r,_i:i})).sort((a,b)=>a.p-b.p),m=indexed.length,last=0;
+ indexed.forEach((r,i)=>{r.adjusted=Math.min(1,(m-i)*r.p);r.reject=r.p<=.05/(m-i)&&r.p<=.05;last=Math.max(last,r.adjusted);r.adjustedMonotone=last});
+ indexed.sort((a,b)=>a._i-b._i);return indexed
+}
+function calcUX(p,cond){
+ let out={};for(const [s,ids] of Object.entries(SCALE_MAP)){let a=ids.map(i=>val(p[cond+"_ux_"+i]));out[s]=mean(a)}
+ out.OverallSatisfaction=val(p[cond+"_ux_28"]);return out
+}
+function calcTLX(p,c){return mean(["mental","physical","temporal","performance","effort","frustration"].map(k=>val(p[c+"_tlx_"+k])))}
+function knowledgeScore(p,c){
+ return state.knowledge.reduce((s,q,i)=>s+(val(p[c+"_k_"+(i+1)])===q[4]?1:0),0)
+}
+function renderNav(){
+ const nav=document.getElementById("nav");nav.innerHTML=["data","questionnaires","results","settings"].map((x,i)=>`<button data-tab="${x}" class="${i===0?'active':''}">${{data:"Participants",questionnaires:"Questionnaires",results:"Analysis",settings:"Settings"}[x]}</button>`).join("");
+ nav.querySelectorAll("button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab))
+}
+function showTab(id){document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));document.getElementById(id).classList.add("active");document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active",x.dataset.tab===id));if(id==="results")renderResults();if(id==="questionnaires")renderQuestionnaires();if(id==="data")renderData()}
+function emptyParticipant(){let p={id:"P"+String(state.participants.length+1).padStart(3,"0"),sequence:"AB",age:"",priorCPR:"",priorAR:""};state.knowledge.forEach((_,i)=>p["pre_k_"+(i+1)]="");["A","B"].forEach(c=>{for(let i=1;i<=28;i++)p[c+"_ux_"+i]="";["mental","physical","temporal","performance","effort","frustration"].forEach(k=>p[c+"_tlx_"+k]="");["time","markerLoss","resets","rejectedTaps","targetRatePct","complete","compressionRate"].forEach(k=>p[c+"_"+k]="")});return p}
+function renderData(){
+ const el=document.getElementById("data");
+ let rows=state.participants.map((p,i)=>`<tr><td>${esc(p.id)}</td><td>${p.sequence}</td><td>${esc(p.age)}</td><td>${esc(p.priorCPR)}</td><td>${esc(p.priorAR)}</td><td>${fmt(knowledgeScore(p,"pre"),0)}</td><td>${fmt(knowledgeScore(p,p.sequence[0]),0)}</td><td>${fmt(knowledgeScore(p,p.sequence[0])-knowledgeScore(p,"pre"),0)}</td><td><button class="secondary" onclick="editParticipant(${i})">Edit</button></td><td><button class="danger" onclick="deleteParticipant(${i})">Delete</button></td></tr>`).join("");
+ el.innerHTML=`<div class="card"><div class="sectiontitle"><div><h2>Participant database</h2><div class="hint">Enter one participant at a time, or import the CSV exported by this app. Sequence AB means A first then B; BA means B first then A.</div></div><span class="badge">${state.participants.length} participants</span></div>
+ <div class="actions"><button class="primary" onclick="addParticipant()">+ Add participant</button><button class="secondary" onclick="exportCSV()">Export CSV</button><button class="secondary" onclick="importCSV()">Import CSV</button><button class="secondary" onclick="loadDemo()">Load demonstration data</button><button class="danger" onclick="clearAll()">Clear all</button></div></div>
+ <div class="card"><div class="tablewrap"><table><thead><tr><th>ID</th><th>Sequence</th><th>Age</th><th>Prior CPR</th><th>Prior AR</th><th>Pre</th><th>1st Post</th><th>Gain</th><th></th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="10">No participants yet.</td></tr>'}</tbody></table></div></div>`;
+}
+function addParticipant(){state.participants.push(emptyParticipant());save();editParticipant(state.participants.length-1)}
+function deleteParticipant(i){if(confirm("Delete this participant?")){state.participants.splice(i,1);save();renderData()}}
+function editParticipant(i){
+ const p=state.participants[i], el=document.getElementById("data");
+ let ux="",tlx="",logs="";
+ for(const c of ["A","B"]){ux+=`<h3>Prototype ${c} — UXARcis (1–7)</h3><div class="qgrid">`;for(let q=1;q<=28;q++)ux+=`<div class="q"><label>${q}. ${esc(state.uxText[q-1]||"UXARcis item "+q)}<input type="number" min="1" max="7" step="1" data-k="${c}_ux_${q}" value="${esc(p[c+"_ux_"+q])}"></label></div>`;ux+="</div>";
+ tlx+=`<h3>Prototype ${c} — Raw NASA-TLX (0–100)</h3><div class="grid">${["mental","physical","temporal","performance","effort","frustration"].map(k=>`<label>${k[0].toUpperCase()+k.slice(1)}<input type="number" min="0" max="100" step="1" data-k="${c}_tlx_${k}" value="${esc(p[c+"_tlx_"+k])}"></label>`).join("")}</div>`;
+ logs+=`<h3>Prototype ${c} — System logs</h3><div class="grid">${[["time","Session time (s)"],["markerLoss","Marker-loss duration (s)"],["resets","Resets"],["rejectedTaps","Rejected rapid taps"],["targetRatePct","Target-rate %"],["compressionRate","Average simulated compression rate"],["complete","Completed (1=yes, 0=no)"]].map(([k,l])=>`<label>${l}<input type="number" data-k="${c}_${k}" value="${esc(p[c+"_"+k])}"></label>`).join("")}</div>`;
+ }
+ let knowledge=`<h3>CPR knowledge pre-test (10 items)</h3><div class="qgrid">`;state.knowledge.forEach((q,i)=>knowledge+=`<div class="q"><label>Q${i+1}<select data-k="pre_k_${i+1}"><option value=""></option>${q.slice(1,5).map((o,j)=>`<option value="${j}" ${String(p["pre_k_"+(i+1)])===String(j)?"selected":""}>${String.fromCharCode(65+j)}. ${esc(o)}</option>`).join("")}</select></label></div>`);knowledge+="</div>";
+ el.innerHTML=`<div class="card"><div class="sectiontitle"><h2>Edit participant ${esc(p.id)}</h2><span class="badge">${p.sequence}</span></div><div class="grid"><label>Participant ID<input id="pid" value="${esc(p.id)}"></label><label>Sequence<select id="seq"><option ${p.sequence==="AB"?"selected":""}>AB</option><option ${p.sequence==="BA"?"selected":""}>BA</option></select></label><label>Age<input id="age" value="${esc(p.age)}"></label><label>Previous CPR training<input id="priorCPR" value="${esc(p.priorCPR)}"></label><label>Previous AR/VR experience<input id="priorAR" value="${esc(p.priorAR)}"></label></div>${knowledge}<div class="notice">For learning, only the post-test immediately after the first prototype is used. Enter it below in the first-condition section. UXARcis and NASA-TLX are collected after both A and B.</div>
+ <h3>First-condition CPR knowledge post-test</h3><div class="qgrid">`+state.knowledge.map((q,i)=>`<div class="q"><label>Q${i+1}<select data-k="${p.sequence[0]+"_k_"+(i+1)}"><option value=""></option>${q.slice(1,5).map((o,j)=>`<option value="${j}" ${String(p[p.sequence[0]+"_k_"+(i+1)])===String(j)?"selected":""}>${String.fromCharCode(65+j)}. ${esc(o)}</option>`).join("")}</select></label></div>`).join("")+`</div>${ux}${tlx}${logs}<div class="actions"><button class="primary" onclick="saveParticipant(${i})">Save participant</button><button class="secondary" onclick="renderData()">Cancel</button></div></div>`;
+}
+function saveParticipant(i){
+ const p=state.participants[i], root=document.getElementById("data");p.id=root.querySelector("#pid").value.trim()||("P"+String(i+1).padStart(3,"0"));p.sequence=root.querySelector("#seq").value;p.age=root.querySelector("#age").value;p.priorCPR=root.querySelector("#priorCPR").value;p.priorAR=root.querySelector("#priorAR").value;
+ root.querySelectorAll("[data-k]").forEach(x=>p[x.dataset.k]=x.value);save();renderData()
+}
+function renderQuestionnaires(){
+ let ux=state.uxText.map((x,i)=>`<tr><td>${i+1}</td><td>${Object.entries(SCALE_MAP).find(([s,ids])=>ids.includes(i+1))?.[0]||"Overall Satisfaction"}</td><td><textarea id="ux_${i}">${esc(x)}</textarea></td></tr>`).join("");
+ let k=state.knowledge.map((q,i)=>`<tr><td>${i+1}</td><td><textarea id="kq_${i}">${esc(q[0])}</textarea></td><td>${q.slice(1,5).map((o,j)=>`<input value="${esc(o)}" id="ko_${i}_${j}"><label><input type="radio" name="kc_${i}" value="${j}" ${j===q[4]?"checked":""}> correct</label>`).join("<br>")}</td></tr>`).join("");
+ document.getElementById("questionnaires").innerHTML=`<div class="card"><h2>Questionnaire configuration</h2><div class="notice">The app ships with the study structure and working question labels. If your approved instrument contains different exact wording, replace the wording here before entering formal data. Scoring fields are fixed; wording is editable for documentation.</div><h3>UXARcis — 28 administered items</h3><div class="tablewrap"><table><thead><tr><th>#</th><th>Scale</th><th>Item wording</th></tr></thead><tbody>${ux}</tbody></table></div><div class="actions"><button class="primary" onclick="saveQuestionnaires()">Save UXARcis wording</button></div></div>
+ <div class="card"><h3>CPR knowledge — 10 items</h3><div class="tablewrap"><table><thead><tr><th>#</th><th>Question</th><th>Options / correct answer</th></tr></thead><tbody>${k}</tbody></table></div><div class="actions"><button class="primary" onclick="saveQuestionnaires()">Save knowledge questionnaire</button></div></div>`;
+}
+function saveQuestionnaires(){for(let i=0;i<28;i++)state.uxText[i]=document.getElementById("ux_"+i).value;for(let i=0;i<10;i++){state.knowledge[i][0]=document.getElementById("kq_"+i).value;for(let j=0;j<4;j++)state.knowledge[i][j+1]=document.getElementById("ko_"+i+"_"+j).value;let r=document.querySelector(`input[name="kc_${i}"]:checked`);state.knowledge[i][4]=r?Number(r.value):0}save();alert("Questionnaires saved.");renderQuestionnaires()}
+function renderResults(){
+ charts.forEach(c=>c.destroy());charts=[];
+ const el=document.getElementById("results"), ps=state.participants;
+ if(!ps.length){el.innerHTML='<div class="card"><h2>Analysis</h2><p class="hint">Add participants first.</p></div>';return}
+ const uxRows=Object.keys(SCALE_MAP).map(s=>{let A=ps.map(p=>calcUX(p,"A")[s]),B=ps.map(p=>calcUX(p,"B")[s]);let t=pairedT(A,B),w=wilcoxon(A,B);return {name:s,A:mean(A),B:mean(B),diff:t.mean,p:t.p,wp:w.p,effect:t.dz,ci:t.ci}});
+ const tlxA=ps.map(p=>calcTLX(p,"A")),tlxB=ps.map(p=>calcTLX(p,"B")),tlxT=pairedT(tlxA,tlxB),tlxW=wilcoxon(tlxA,tlxB);
+ const aFirst=ps.filter(p=>p.sequence==="AB").map(p=>knowledgeScore(p,"A")-knowledgeScore(p,"pre")),bFirst=ps.filter(p=>p.sequence==="BA").map(p=>knowledgeScore(p,"B")-knowledgeScore(p,"pre")),learn=welch(aFirst,bFirst),learnMW=mannWhitney(aFirst,bFirst);
+ const compA=ps.map(p=>Number(p.A_complete)===1),compB=ps.map(p=>Number(p.B_complete)===1),mc=mcnemar(compA.map(x=>x?1:0),compB.map(x=>x?1:0));
+ const holmRows=holm(uxRows.map(r=>({name:r.name,p:r.p})));
+ let hmap=Object.fromEntries(holmRows.map(r=>[r.name,r]));
+ let uxTable=uxRows.map(r=>`<tr><td>${r.name}</td><td class="num">${fmt(r.A)}</td><td class="num">${fmt(r.B)}</td><td class="num">${fmt(r.diff)}</td><td class="num">${p2(r.p)}</td><td class="num">${p2(hmap[r.name].adjustedMonotone)}</td><td class="num">${fmt(r.effect)}</td><td>${r.p<.05?"Significant before correction":"Not significant"}</td></tr>`).join("");
+ let timeT=pairedT(arr(p=>val(p.A_time)),arr(p=>val(p.B_time))),rateT=pairedT(arr(p=>val(p.A_targetRatePct)),arr(p=>val(p.B_targetRatePct))),resetW=wilcoxon(arr(p=>val(p.A_resets)),arr(p=>val(p.B_resets)));
+ el.innerHTML=`<div class="card"><h2>Analysis dashboard</h2><div class="metricgrid"><div class="metric">N<b>${ps.length}</b></div><div class="metric">AB<b>${ps.filter(p=>p.sequence==="AB").length}</b></div><div class="metric">BA<b>${ps.filter(p=>p.sequence==="BA").length}</b></div><div class="metric">Mean UX A→B<b>${fmt(mean(uxRows.map(r=>r.diff)))}</b></div><div class="metric">Raw TLX A→B<b>${fmt(tlxT.mean)}</b></div></div></div>
+ <div class="card"><h2>UXARcis scale analysis</h2><p class="hint">Paired A/B comparisons. Holm adjustment is applied to the seven pre-specified retained UXARcis scales. Overall Satisfaction is kept separate.</p><div class="tablewrap"><table><thead><tr><th>Scale</th><th>A mean</th><th>B mean</th><th>B−A</th><th>p paired t</th><th>Holm p</th><th>Cohen dz</th><th>Interpretation</th></tr></thead><tbody>${uxTable}</tbody></table></div></div>
+ <div class="card"><h2>NASA-TLX</h2><div class="metricgrid"><div class="metric">A mean<b>${fmt(mean(tlxA))}</b></div><div class="metric">B mean<b>${fmt(mean(tlxB))}</b></div><div class="metric">B−A<b>${fmt(tlxT.mean)}</b></div><div class="metric">p<b>${p2(tlxT.p)}</b></div><div class="metric">Cohen dz<b>${fmt(tlxT.dz)}</b></div></div><p class="hint">Primary comparison: paired t-test. Wilcoxon signed-rank p = ${p2(tlxW.p)}. 95% CI for B−A = [${fmt(tlxT.ci[0])}, ${fmt(tlxT.ci[1])}].</p></div>
+ <div class="card"><h2>CPR knowledge gain</h2><div class="metricgrid"><div class="metric">AB A-first mean gain<b>${fmt(mean(aFirst))}</b></div><div class="metric">BA B-first mean gain<b>${fmt(mean(bFirst))}</b></div><div class="metric">B−A gain<b>${fmt(learn.diff)}</b></div><div class="metric">Welch p<b>${p2(learn.p)}</b></div><div class="metric">Effect size<b>${fmt(learn.g)}</b></div></div><p class="hint">Learning is analyzed between A-first and B-first groups because the second prototype exposure is contaminated by carry-over. Mann–Whitney U p = ${p2(learnMW.p)}. 95% CI for B-first minus A-first = [${fmt(learn.ci[0])}, ${fmt(learn.ci[1])}].</p></div>
+ <div class="card"><h2>Behavioral outcomes</h2><div class="tablewrap"><table><thead><tr><th>Outcome</th><th>A mean</th><th>B mean</th><th>B−A</th><th>Test</th><th>p</th><th>Effect</th></tr></thead><tbody>
+ <tr><td>Session time (s)</td><td class="num">${fmt(mean(arr(p=>val(p.A_time))))}</td><td class="num">${fmt(mean(arr(p=>val(p.B_time))))}</td><td class="num">${fmt(timeT.mean)}</td><td>Paired t</td><td class="num">${p2(timeT.p)}</td><td>${fmt(timeT.dz)}</td></tr>
+ <tr><td>Target-rate percentage</td><td class="num">${fmt(mean(arr(p=>val(p.A_targetRatePct))))}</td><td class="num">${fmt(mean(arr(p=>val(p.B_targetRatePct))))}</td><td class="num">${fmt(rateT.mean)}</td><td>Paired t</td><td class="num">${p2(rateT.p)}</td><td>${fmt(rateT.dz)}</td></tr>
+ <tr><td>Resets</td><td class="num">${fmt(mean(arr(p=>val(p.A_resets))))}</td><td class="num">${fmt(mean(arr(p=>val(p.B_resets))))}</td><td class="num">${fmt(mean(arr(p=>val(p.B_resets)))-mean(arr(p=>val(p.A_resets))))}</td><td>Wilcoxon</td><td class="num">${p2(resetW.p)}</td><td>${fmt(resetW.rbc)}</td></tr>
+ </tbody></table></div></div>
+ <div class="card"><h2>Completion — McNemar test</h2><p>A→B discordant = ${mc.n01}; B→A discordant = ${mc.n10}; exact two-sided p ≈ ${p2(mc.p)}. If all participants complete both conditions, report descriptively because there is no discordant variation.</p></div>
+ <div class="card"><h2>Charts</h2><canvas id="uxChart"></canvas><canvas id="tlxChart" style="margin-top:20px"></canvas></div>
+ <div class="card"><h2>Export analysis</h2><button class="primary" onclick="exportResults()">Download analysis report (HTML)</button></div>`;
+ charts.push(new Chart(document.getElementById("uxChart"),{type:"bar",data:{labels:uxRows.map(x=>x.name),datasets:[{label:"Prototype A",data:uxRows.map(x=>x.A)},{label:"Prototype B",data:uxRows.map(x=>x.B)}]},options:{responsive:true,scales:{y:{min:1,max:7}}}}));
+ charts.push(new Chart(document.getElementById("tlxChart"),{type:"bar",data:{labels:["Raw NASA-TLX"],datasets:[{label:"A",data:[mean(tlxA)]},{label:"B",data:[mean(tlxB)]}]},options:{responsive:true,scales:{y:{min:0,max:100}}}}));
+}
+function renderSettings(){document.getElementById("settings").innerHTML=`<div class="card"><h2>Study settings</h2><div class="grid"><label>Alpha<input id="alpha" type="number" step=".01" value="${state.settings.alpha}"></label><label>Holm correction<select id="holm"><option value="1" ${state.settings.holm?"selected":""}>Yes</option><option value="0" ${!state.settings.holm?"selected":""}>No</option></select></label></div><div class="actions"><button class="primary" onclick="saveSettings()">Save settings</button></div></div><div class="card"><h2>Important methodological boundaries</h2><p class="hint">This app treats UXARcis as seven retained scale scores plus separate Overall Satisfaction, uses Raw NASA-TLX, uses paired A/B tests for within-participant outcomes, uses first-condition learning gain for AB vs BA, and treats touchscreen compression rate as simulated pacing rather than physical CPR quality. The exact approved questionnaire wording should be verified before formal data collection.</p></div>`}
+function saveSettings(){state.settings.alpha=Number(document.getElementById("alpha").value)||.05;state.settings.holm=document.getElementById("holm").value==="1";save();renderSettings()}
+function csvEscape(x){return '"'+String(x??"").replace(/"/g,'""')+'"'}
+function allKeys(){let p=emptyParticipant();return Object.keys(p)}
+function exportCSV(){let keys=allKeys();let csv=keys.map(csvEscape).join(",")+"\n"+state.participants.map(p=>keys.map(k=>csvEscape(p[k])).join(",")).join("\n");downloadBlob(csv,"webxr_cpr_participants.csv","text/csv")}
+function importCSV(){const input=document.createElement("input");input.type="file";input.accept=".csv";input.onchange=()=>{const f=input.files[0],r=new FileReader();r.onload=()=>{let lines=r.result.split(/\r?\n/).filter(x=>x.trim());if(lines.length<2)return;let headers=parseCSVLine(lines[0]);state.participants=lines.slice(1).map(line=>{let a=parseCSVLine(line),p=emptyParticipant();headers.forEach((h,i)=>{if(h in p)p[h]=a[i]??""});return p});save();renderData()};r.readAsText(f)};input.click()}
+function parseCSVLine(s){let out=[],cur="",q=false;for(let i=0;i<s.length;i++){let c=s[i];if(c==='"'){if(q&&s[i+1]==='"'){cur+='"';i++}else q=!q}else if(c===","&&!q){out.push(cur);cur=""}else cur+=c}out.push(cur);return out}
+function downloadBlob(content,name,type){let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function exportResults(){downloadBlob(document.documentElement.outerHTML,"webxr_cpr_analysis_report.html","text/html")}
+function clearAll(){if(confirm("Delete all participant data?")){state.participants=[];save();renderData()}}
+function loadDemo(){
+ state.participants=[];
+ for(let i=0;i<12;i++){let p=emptyParticipant();p.id="P"+String(i+1).padStart(3,"0");p.sequence=i<6?"AB":"BA";p.age=20+i;p.priorCPR=i%3===0?"Yes":"No";p.priorAR=i%4===0?"Yes":"No";state.knowledge.forEach((q,j)=>p["pre_k_"+(j+1)]=(j+i)%4===q[4]?q[4]:(j+i+1)%4);let first=p.sequence[0],second=p.sequence[1];
+ for(let j=0;j<10;j++)p[first+"_k_"+(j+1)]=qAns=state.knowledge[j][4];
+ for(let c of ["A","B"]){for(let q=1;q<=28;q++)p[c+"_ux_"+q]=Math.max(1,Math.min(7,Math.round((c==="B"?5.8:5.1)+(Math.sin((i+q)/3)*.7))));for(let k of ["mental","physical","temporal","performance","effort","frustration"])p[c+"_tlx_"+k]=Math.round((c==="B"?42:56)+(i%4)*2);p[c+"_time"]=c==="B"?Math.round(210+i*3):Math.round(235+i*4);p[c+"_markerLoss"]=Math.round(4+i%3);p[c+"_resets"]=c==="B"?i%2:(i+1)%3;p[c+"_rejectedTaps"]=c==="B"?1+i%2:3+i%2;p[c+"_targetRatePct"]=c==="B"?82+i%5:67+i%5;p[c+"_compressionRate"]=c==="B"?108+i%4:101+i%4;p[c+"_complete"]=1}state.participants.push(p)}
+ save();renderData();alert("Demo data loaded. It is synthetic; replace it with your collected data.");}
+load();renderNav();renderData();renderQuestionnaires();renderSettings();
+</script>
+</body></html>
